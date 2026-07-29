@@ -1956,6 +1956,7 @@ void Filler::fillRepliesActions() {
 		addInfo();
 		AyuUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
 		addManageTopic();
+		AyuUi::AddDeleteOwnMessagesAction(_peer, _topic, _controller, _addAction);
 	}
 	addBoostChat();
 	addCreatePoll();

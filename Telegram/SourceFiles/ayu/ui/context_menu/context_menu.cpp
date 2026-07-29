@@ -76,7 +76,7 @@ Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> cont
 	};
 }
 
-void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
+void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer, MsgId topicRootId) {
 	const auto session = &peer->session();
 
 	auto collected = std::make_shared<std::vector<MsgId>>();
@@ -140,13 +140,14 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 	{
 		using Flag = MTPmessages_Search::Flag;
 		auto request = MTPmessages_Search(
-			MTP_flags(Flag::f_from_id),
+			MTP_flags(Flag::f_from_id
+				| (topicRootId ? Flag::f_top_msg_id : Flag())),
 			peer->input(),
 			MTP_string(),
 			MTP_inputPeerSelf(),
 			MTPInputPeer(),
 			MTPVector<MTPReaction>(),
-			MTP_int(0),
+			MTP_int(topicRootId),
 			// top_msg_id
 			MTP_inputMessagesFilterEmpty(),
 			MTP_int(0),
@@ -190,16 +191,29 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 	(*requestNext)(MsgId(0));
 }
 
-Fn<void()> DeleteMyMessagesHandler(not_null<Window::SessionController*> controller, not_null<PeerData*> peer) {
+[[nodiscard]] QString DeleteMyMessagesText(not_null<PeerData*> peer, MsgId topicRootId) {
+	if (topicRootId) {
+		return tr::ayu_DeleteOwnMessagesConfirmationTopic(tr::now);
+	} else if (peer->isSelf()) {
+		return tr::ayu_DeleteOwnMessagesConfirmationSaved(tr::now);
+	} else if (peer->isChat() || peer->isMegagroup()) {
+		return tr::ayu_DeleteOwnMessagesConfirmation(tr::now);
+	}
+	return tr::ayu_DeleteOwnMessagesConfirmationChat(tr::now);
+}
+
+Fn<void()> DeleteMyMessagesHandler(not_null<Window::SessionController*> controller,
+								   not_null<PeerData*> peer,
+								   MsgId topicRootId) {
 	return [=]
 	{
 		if (!controller->showFrozenError()) {
 			controller->show(Ui::MakeConfirmBox({
-				.text = tr::ayu_DeleteOwnMessagesConfirmation(tr::now),
+				.text = DeleteMyMessagesText(peer, topicRootId),
 				.confirmed =
 				[=](Fn<void()> &&close)
 				{
-					DeleteMyMessagesAfterConfirm(peer);
+					DeleteMyMessagesAfterConfirm(peer, topicRootId);
 					close();
 				},
 				.confirmText = tr::lng_box_delete(),
@@ -436,27 +450,29 @@ void AddDeleteOwnMessagesAction(PeerData *peerData,
 								Data::ForumTopic *topic,
 								not_null<Window::SessionController*> sessionController,
 								const Window::PeerMenuCallback &addCallback) {
-	if (topic) {
-		return;
-	}
-	const auto isGroup = peerData->isChat() || peerData->isMegagroup();
-	if (!isGroup) {
+	if (!peerData
+		|| peerData->isMonoforum()
+		|| peerData->isRepliesChat()
+		|| peerData->isVerifyCodes()) {
 		return;
 	}
 	if (const auto chat = peerData->asChat()) {
-		if (!chat->amIn() || chat->amCreator() || chat->hasAdminRights()) {
+		if (!chat->amIn()) {
 			return;
 		}
 	} else if (const auto channel = peerData->asChannel()) {
-		if (!channel->isMegagroup() || !channel->amIn() || channel->amCreator() || channel->hasAdminRights()) {
+		if (!channel->amIn()
+			|| (channel->isBroadcast()
+				&& !channel->canPostMessages()
+				&& !channel->canDeleteMessages())) {
 			return;
 		}
-	} else {
+	} else if (!peerData->isUser()) {
 		return;
 	}
 	addCallback(
 		tr::ayu_DeleteOwnMessages(tr::now),
-		DeleteMyMessagesHandler(sessionController, peerData),
+		DeleteMyMessagesHandler(sessionController, peerData, topic ? topic->rootId() : MsgId(0)),
 		&st::menuIconTTL);
 }
 

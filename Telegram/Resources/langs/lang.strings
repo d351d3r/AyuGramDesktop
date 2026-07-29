@@ -8890,6 +8890,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_ClearDeletedMessagesActionText" = "Clear";
 "ayu_DeleteOwnMessages" = "Delete own messages";
 "ayu_DeleteOwnMessagesConfirmation" = "Are you sure you want to delete all your messages from this group?";
+"ayu_DeleteOwnMessagesConfirmationChat" = "Are you sure you want to delete all your messages from this chat?";
+"ayu_DeleteOwnMessagesConfirmationTopic" = "Are you sure you want to delete all your messages from this topic?";
+"ayu_DeleteOwnMessagesConfirmationSaved" = "Are you sure you want to delete all messages from Saved Messages?";
 "ayu_SuggestGhostModeTitle" = "Ghost Mode";
 "ayu_SuggestGhostModeStoryText" = "Do you want to enable **Ghost Mode** before viewing the story?";
 "ayu_SuggestGhostModeStoryActionTextYes" = "Yes";
