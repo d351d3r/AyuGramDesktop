@@ -50,9 +50,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_giveaway.h"
 #include "styles/style_info.h"
 #include "styles/style_layers.h"
-#include "styles/style_premium.h"
 #include "styles/style_settings.h"
-#include "styles/style_statistics.h"
 
 #include <xxhash.h> // XXH64.
 
@@ -971,7 +969,8 @@ void CreateGiveawayBox(
 				Ui::SelectCountriesBox,
 				state->countriesValue.current(),
 				std::move(done),
-				std::move(error)));
+				std::move(error),
+				Countries::Naming::Default));
 		};
 
 		const auto createCallback = [=](GiveawayType type) {

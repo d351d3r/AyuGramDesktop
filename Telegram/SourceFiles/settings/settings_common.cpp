@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "base/timer.h"
 #include "lottie/lottie_icon.h"
+#include "menu/menu_send_details.h"
 #include "ui/effects/animations.h"
 #include "ui/effects/premium_graphics.h"
 #include "ui/effects/premium_top_bar.h"
@@ -20,7 +21,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/labels.h"
 #include "ui/widgets/scroll_area.h"
 #include "ui/wrap/vertical_layout.h"
-#include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 #include "styles/style_widgets.h"
@@ -294,6 +294,14 @@ AbstractSection::AbstractSection(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller)
 : _controller(controller) {
+}
+
+SendMenu::Details AbstractSection::sendMenuDetails() const {
+	return {};
+}
+
+bool AbstractSection::processChosenSticker(ChatHelpers::FileChosen &&) {
+	return false;
 }
 
 void AbstractSection::build(

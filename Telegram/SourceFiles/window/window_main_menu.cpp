@@ -68,11 +68,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_peer_menu.h"
 #include "window/window_session_controller.h"
 #include "styles/style_chat.h" // popupMenuExpandedSeparator
-#include "styles/style_info.h" // infoTopBarMenu
-#include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 #include "styles/style_window.h"
+#include "styles/style_window_main_menu.h"
 
 #include <QtGui/QWindow>
 #include <QtGui/QScreen>
@@ -971,10 +970,28 @@ void MainMenu::chooseEmojiStatus() {
 	if (_controller->showFrozenError()) {
 		return;
 	} else if (const auto widget = _badge->widget()) {
+		setupEmojiStatusDismiss();
 		_emojiStatusPanel->show(_controller, widget, _badge->sizeTag());
 	} else {
 		ShowPremiumPreviewBox(_controller, PremiumFeature::EmojiStatus);
 	}
+}
+
+void MainMenu::setupEmojiStatusDismiss() {
+	if (_emojiStatusDismissSetup) {
+		return;
+	}
+	_emojiStatusDismissSetup = true;
+
+	base::install_event_filter(this, parentWidget(), [=](
+			not_null<QEvent*> e) {
+		if (e->type() != QEvent::MouseButtonPress
+			|| !_emojiStatusPanel->shown()) {
+			return base::EventFilterResult::Continue;
+		}
+		_emojiStatusPanel->hideAnimated();
+		return base::EventFilterResult::Cancel;
+	});
 }
 
 bool MainMenu::eventHook(QEvent *event) {
@@ -986,6 +1003,10 @@ bool MainMenu::eventHook(QEvent *event) {
 		QGuiApplication::sendEvent(_inner, event);
 	}
 	return RpWidget::eventHook(event);
+}
+
+void MainMenu::hideEvent(QHideEvent *e) {
+	_emojiStatusPanel->hideFast();
 }
 
 void MainMenu::paintEvent(QPaintEvent *e) {
@@ -1157,8 +1178,8 @@ void MainMenu::setupSwipe() {
 		}
 	};
 
-	auto init = [=](int, Qt::LayoutDirection direction) {
-		if (direction != Qt::LeftToRight) {
+	auto init = [=](Ui::Controls::SwipeHandlerInitData data) {
+		if (data.direction != Qt::LeftToRight) {
 			return Ui::Controls::SwipeHandlerFinishData();
 		}
 		if (_emojiStatusPanel && _emojiStatusPanel->hasFocus()) {

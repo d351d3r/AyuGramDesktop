@@ -56,7 +56,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/effects/path_shift_gradient.h"
 #include "ui/effects/premium_graphics.h"
 #include "ui/layers/generic_box.h"
-#include "ui/new_badges.h"
 #include "ui/peer/color_sample.h"
 #include "ui/text/text_utilities.h"
 #include "ui/widgets/buttons.h"
@@ -69,6 +68,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/themes/window_theme.h"
 #include "window/section_widget.h"
 #include "window/window_session_controller.h"
+#include "styles/style_boxes.h"
 #include "styles/style_chat.h"
 #include "styles/style_credits.h"
 #include "styles/style_info.h" // defaultSubTabs.
@@ -851,9 +851,11 @@ void Apply(
 	if (const auto channel = peer->asChannel()) {
 		const auto limits = Data::LevelLimits(&channel->session());
 		AddLevelBadge(
-			profileIndices
-				? limits.channelProfileBgIconLevelMin()
-				: limits.channelBgIconLevelMin(),
+			(!profileIndices
+				? limits.channelBgIconLevelMin()
+				: channel->isMegagroup()
+				? limits.groupProfileBgIconLevelMin()
+				: limits.channelProfileBgIconLevelMin()),
 			raw,
 			right,
 			channel,
@@ -2743,32 +2745,6 @@ not_null<Ui::SettingsButton*> AddPeerColorButton(
 
 	if (!peer->isMegagroup()) {
 		SetupPeerColorSample(button, peer, rpl::duplicate(label), style);
-	}
-
-	{
-		const auto badge = Ui::NewBadge::CreateNewBadge(
-			button,
-			tr::lng_premium_summary_new_badge()).get();
-		rpl::combine(
-			rpl::duplicate(label),
-			button->widthValue()
-		) | rpl::on_next([=](
-				const QString &text,
-				int width) {
-			const auto space = st.style.font->spacew;
-			const auto left = st.padding.left()
-				+ st.style.font->width(text)
-				+ space;
-			const auto available = width - left - st.padding.right();
-			badge->setVisible(available >= badge->width());
-			if (!badge->isHidden()) {
-				const auto top = st.padding.top()
-					+ st.style.font->ascent
-					- st::settingsPremiumNewBadge.style.font->ascent
-					- st::settingsPremiumNewBadgePadding.top();
-				badge->moveToLeft(left, top, width);
-			}
-		}, badge->lifetime());
 	}
 
 	button->setClickedCallback([=] {

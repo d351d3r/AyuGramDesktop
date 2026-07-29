@@ -45,11 +45,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/wrap/vertical_layout.h"
 #include "ui/ui_utility.h"
 #include "window/window_session_controller.h"
-#include "styles/style_boxes.h"
 #include "styles/style_chat_helpers.h" // defaultComposeFiles.
 #include "styles/style_layers.h"
 #include "styles/style_polls.h"
-#include "styles/style_settings.h"
 
 namespace {
 
@@ -564,7 +562,7 @@ std::vector<TodoListItem> Tasks::toTodoListItems() const {
 	auto usedId = 0;
 	for (const auto &task : _list) {
 		if (const auto id = task->id()) {
-			usedId = id;
+			usedId = id > usedId ? id : usedId;
 		} else if (task->isGood()) {
 			++usedId;
 		}
