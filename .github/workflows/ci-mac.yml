@@ -1,0 +1,126 @@
+name: CI MacOS.
+
+on:
+  push:
+    branches:
+      - upstream-7.0.6
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'changelog.txt'
+      - 'LEGAL'
+      - 'LICENSE'
+      - 'lib/xdg/**'
+      - 'Telegram/build/docker/**'
+      - 'Telegram/Resources/uwp/**'
+      - 'Telegram/Resources/winrc/**'
+      - 'Telegram/SourceFiles/platform/win/**'
+      - 'Telegram/SourceFiles/platform/linux/**'
+      - 'Telegram/configure.bat'
+  workflow_dispatch:
+    inputs:
+      only_cache:
+        description: 'Build libraries only, then save the cache.'
+        type: boolean
+        default: false
+
+jobs:
+
+  macos:
+    name: MacOS
+    runs-on: macos-latest
+
+    env:
+      ONLY_CACHE: ${{ inputs.only_cache && 'true' || 'false' }}
+      PREPARE_PATH: "Telegram/build/prepare/prepare.py"
+
+    steps:
+      - name: Get repository name.
+        run: echo "REPO_NAME=${GITHUB_REPOSITORY##*/}" >> $GITHUB_ENV
+
+      - name: Clone.
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          path: ${{ env.REPO_NAME }}
+
+      - name: First set up.
+        run: |
+          sudo chown -R `whoami`:admin /usr/local/share
+
+          brew update
+          brew upgrade || true
+          brew install automake libtool meson nasm ninja pkg-config
+
+          # Disable spotlight.
+          sudo mdutil -a -i off
+
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+          sudo sed -i '' '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/ -g//' /opt/homebrew/share/cmake/Modules/Compiler/GNU.cmake
+
+      - name: Restore libraries cache.
+        id: cache-libs
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            Libraries
+            ThirdParty
+          key: ${{ runner.OS }}-libs-${{ hashFiles(format('{0}/{1}', env.REPO_NAME, env.PREPARE_PATH)) }}
+          restore-keys: ${{ runner.OS }}-libs-
+
+      - name: Libraries.
+        run: |
+          ./$REPO_NAME/Telegram/build/prepare/mac.sh skip-release silent
+
+      - name: Free up some disk space.
+        run: find Libraries '(' '(' ! '(' -name '*.a' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -perm +111 ')' -type f ')' -o -empty ')' -delete
+
+      - name: Save libraries cache.
+        if: always() && steps.cache-libs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            Libraries
+            ThirdParty
+          key: ${{ runner.OS }}-libs-${{ hashFiles(format('{0}/{1}', env.REPO_NAME, env.PREPARE_PATH)) }}
+
+      - name: AyuGram build.
+        if: env.ONLY_CACHE == 'false'
+        run: |
+          cd $REPO_NAME/Telegram
+
+          ./configure.sh \
+          -D CMAKE_CONFIGURATION_TYPES=Debug \
+          -D CMAKE_COMPILE_WARNING_AS_ERROR=OFF \
+          -D CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+          -D TDESKTOP_API_TEST=ON \
+          -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF \
+          -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF
+
+          cmake --build ../out --config Debug --parallel
+
+      - name: Check.
+        if: env.ONLY_CACHE == 'false'
+        run: |
+          bundlePath="$REPO_NAME/out/Debug/AyuGram.app"
+          if test -d "$bundlePath"; then
+            echo "Build successfully done! :)"
+          else
+            echo "Build error, output bundle does not exist."
+            exit 1
+          fi
+
+      - name: Move artifact.
+        if: env.ONLY_CACHE == 'false'
+        run: |
+          cd $REPO_NAME/out/Debug
+          mkdir artifact
+          mv AyuGram.app artifact/
+          mv Updater artifact/
+      - uses: actions/upload-artifact@v7
+        if: env.ONLY_CACHE == 'false'
+        name: Upload artifact.
+        with:
+          name: AyuGram
+          path: ${{ env.REPO_NAME }}/out/Debug/artifact/
