@@ -13750,7 +13750,22 @@ namespace sqlite_orm {
                 if (1 == ++this->_retain_count) {
                     auto rc = sqlite3_open(this->filename.c_str(), &this->db);
                     if (rc != SQLITE_OK) {
-                        throw_translated_sqlite_error(db);
+                        // AyuGram patch, see docs/vendored-patches.md.
+                        //
+                        // The count is raised before the open, and a failed open throws out
+                        // of connection_ref's constructor, so that object never finishes and
+                        // its destructor never calls release(). Leaving the count up would
+                        // keep it above zero for the rest of the process, and every later
+                        // retain() would skip the open and hand out the handle of the
+                        // connection that just failed. Undo the increment, and close the
+                        // handle sqlite3_open still returns on failure so the next attempt
+                        // does not overwrite and leak it.
+                        auto failed = this->db;
+                        this->db = nullptr;
+                        --this->_retain_count;
+                        auto error = sqlite_to_system_error(failed);
+                        sqlite3_close(failed);
+                        throw error;
                     }
                 }
             }
@@ -13761,6 +13776,7 @@ namespace sqlite_orm {
                     if (rc != SQLITE_OK) {
                         throw_translated_sqlite_error(db);
                     }
+                    this->db = nullptr;
                 }
             }
 

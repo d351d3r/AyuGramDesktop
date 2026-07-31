@@ -421,19 +421,38 @@ void TestReadsSurviveACorruptedDatabase() {
 }
 
 void TestInitializeSurvivesAnUnusableDirectory() {
-	const auto directory = TempDatabaseDirectory(TempDatabaseDirectory::Tdata::Missing);
-	CHECK(!std::filesystem::exists("./tdata"));
+	{
+		const auto directory = TempDatabaseDirectory(TempDatabaseDirectory::Tdata::Missing);
+		CHECK(!std::filesystem::exists("./tdata"));
 
+		CHECK(!Throws([] { AyuDatabase::initialize(); }));
+		CHECK(!std::filesystem::exists("./tdata/ayudata.db"));
+
+		CHECK(!Throws([] { AyuDatabase::getDeletedMessages(100, 200, 0, 0, 0, 100); }));
+		CHECK(!Throws([] { AyuDatabase::getEditedMessages(100, 200, 5, 0, 0, 100); }));
+
+		// Writes go through begin_transaction / rollback, which reach for the
+		// connection the failed open never produced.
+		CHECK(!Throws([] { AyuDatabase::addDeletedMessage(MakeDeleted(100, 200, 0, 5, "unusable")); }));
+		CHECK(!Throws([] { AyuDatabase::addEditedMessage(MakeEdited(100, 200, 0, 5, "unusable")); }));
+
+		CHECK(AyuDatabase::getDeletedMessages(100, 200, 0, 0, 0, 100).empty());
+		CHECK(AyuDatabase::getEditedMessages(100, 200, 5, 0, 0, 100).empty());
+		CHECK(!AyuDatabase::hasDeletedMessages(100, 200, 0));
+		CHECK(!AyuDatabase::hasRevisions(100, 200, 5));
+	}
+
+	const auto directory = TempDatabaseDirectory();
 	CHECK(!Throws([] { AyuDatabase::initialize(); }));
-	CHECK(!std::filesystem::exists("./tdata/ayudata.db"));
+	CHECK(std::filesystem::exists("./tdata/ayudata.db"));
 
-	CHECK(!Throws([] { AyuDatabase::getDeletedMessages(100, 200, 0, 0, 0, 100); }));
-	CHECK(!Throws([] { AyuDatabase::getEditedMessages(100, 200, 5, 0, 0, 100); }));
+	AyuDatabase::addDeletedMessage(MakeDeleted(100, 200, 0, 7, "after an unusable directory"));
+	CHECK(TextsOf(AyuDatabase::getDeletedMessages(100, 200, 0, 0, 0, 100))
+		== Texts{"after an unusable directory"});
 
-	CHECK(AyuDatabase::getDeletedMessages(100, 200, 0, 0, 0, 100).empty());
-	CHECK(AyuDatabase::getEditedMessages(100, 200, 5, 0, 0, 100).empty());
-	CHECK(!AyuDatabase::hasDeletedMessages(100, 200, 0));
-	CHECK(!AyuDatabase::hasRevisions(100, 200, 5));
+	AyuDatabase::addEditedMessage(MakeEdited(100, 200, 0, 7, "after an unusable directory"));
+	CHECK(TextsOf(AyuDatabase::getEditedMessages(100, 200, 7, 0, 0, 100))
+		== Texts{"after an unusable directory"});
 }
 
 } // namespace
@@ -441,6 +460,7 @@ void TestInitializeSurvivesAnUnusableDirectory() {
 int main() {
 	Run("initialize on a fresh directory", TestInitializeOnFreshDirectory);
 	Run("initialize moves a corrupted database aside", TestInitializeMovesCorruptedDatabaseAside);
+	Run("initialize survives a directory it cannot use", TestInitializeSurvivesAnUnusableDirectory);
 	Run("deleted message roundtrip", TestDeletedMessageRoundtrip);
 	Run("deleted messages are scoped by account, dialog and topic", TestDeletedMessagesScoping);
 	Run("deleted messages minId / maxId / totalLimit", TestDeletedMessagesRange);
@@ -451,13 +471,6 @@ int main() {
 	Run("edit history and deleted messages are independent", TestEditedAndDeletedStayIndependent);
 	Run("every test runs against a fresh database", TestFreshDirectoryPerTest);
 	Run("reads degrade instead of throwing on a corrupt database", TestReadsSurviveACorruptedDatabase);
-
-	// Keep last. sqlite_orm's connection_holder raises its retain count before
-	// calling sqlite3_open and throws without lowering it again when the open
-	// fails, so the count never returns to zero and every later call reuses the
-	// handle left behind by that failed open. One directory the database cannot
-	// be created in therefore poisons the storage for the rest of the process.
-	Run("initialize survives a directory it cannot use", TestInitializeSurvivesAnUnusableDirectory);
 
 	AyuTests::RunEntitiesTests();
 	AyuTests::RunTelegramHelpersTests();
