@@ -233,11 +233,16 @@ void initialize() {
 		storage.sync_schema(true);
 	} catch (const std::exception &ex) {
 		LOG(("Database initialization failed: %1").arg(ex.what()));
-		moveCurrentDatabase();
 
-		storage.sync_schema(true);
-		if (!storage.get_pointer<SchemaVersion>(1)) {
-			storage.insert(SchemaVersion{1, 0});
+		try {
+			moveCurrentDatabase();
+
+			storage.sync_schema(true);
+			if (!storage.get_pointer<SchemaVersion>(1)) {
+				storage.insert(SchemaVersion{1, 0});
+			}
+		} catch (...) {
+			LOG(("Database recovery failed, continuing without storage"));
 		}
 	}
 }
@@ -257,17 +262,22 @@ void addEditedMessage(const EditedMessage &message) {
 }
 
 std::vector<EditedMessage> getEditedMessages(ID userId, ID dialogId, ID messageId, ID minId, ID maxId, int totalLimit) {
-	return storage.get_all<EditedMessage>(
-		where(
-			column<EditedMessage>(&EditedMessage::userId) == userId and
-			column<EditedMessage>(&EditedMessage::dialogId) == dialogId and
-			column<EditedMessage>(&EditedMessage::messageId) == messageId and
-			(column<EditedMessage>(&EditedMessage::fakeId) > minId or minId == 0) and
-			(column<EditedMessage>(&EditedMessage::fakeId) < maxId or maxId == 0)
-		),
-		order_by(column<EditedMessage>(&EditedMessage::fakeId)).desc(),
-		limit(totalLimit)
-	);
+	try {
+		return storage.get_all<EditedMessage>(
+			where(
+				column<EditedMessage>(&EditedMessage::userId) == userId and
+				column<EditedMessage>(&EditedMessage::dialogId) == dialogId and
+				column<EditedMessage>(&EditedMessage::messageId) == messageId and
+				(column<EditedMessage>(&EditedMessage::fakeId) > minId or minId == 0) and
+				(column<EditedMessage>(&EditedMessage::fakeId) < maxId or maxId == 0)
+			),
+			order_by(column<EditedMessage>(&EditedMessage::fakeId)).desc(),
+			limit(totalLimit)
+		);
+	} catch (std::exception &ex) {
+		LOG(("Failed to get edited messages: %1").arg(ex.what()));
+		return {};
+	}
 }
 
 bool hasRevisions(ID userId, ID dialogId, ID messageId) {
@@ -302,41 +312,46 @@ void addDeletedMessage(const DeletedMessage &message) {
 }
 
 std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicId, ID minId, ID maxId, int totalLimit, const std::string &searchQuery) {
-	if (searchQuery.empty()) {
+	try {
+		if (searchQuery.empty()) {
+			return storage.get_all<DeletedMessage>(
+				where(
+					column<DeletedMessage>(&DeletedMessage::userId) == userId and
+					column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId and
+					(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0) and
+					(column<DeletedMessage>(&DeletedMessage::messageId) > minId or minId == 0) and
+					(column<DeletedMessage>(&DeletedMessage::messageId) < maxId or maxId == 0)
+				),
+				order_by(column<DeletedMessage>(&DeletedMessage::messageId)).desc(),
+				limit(totalLimit)
+			);
+		}
+
+		std::string escaped;
+		escaped.reserve(searchQuery.size());
+		for (const auto c : searchQuery) {
+			if (c == '%' || c == '_' || c == '\\') {
+				escaped += '\\';
+			}
+			escaped += c;
+		}
+		const auto pattern = "%" + escaped + "%";
 		return storage.get_all<DeletedMessage>(
 			where(
 				column<DeletedMessage>(&DeletedMessage::userId) == userId and
 				column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId and
 				(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0) and
 				(column<DeletedMessage>(&DeletedMessage::messageId) > minId or minId == 0) and
-				(column<DeletedMessage>(&DeletedMessage::messageId) < maxId or maxId == 0)
+				(column<DeletedMessage>(&DeletedMessage::messageId) < maxId or maxId == 0) and
+				like(column<DeletedMessage>(&DeletedMessage::text), pattern, "\\")
 			),
 			order_by(column<DeletedMessage>(&DeletedMessage::messageId)).desc(),
 			limit(totalLimit)
 		);
+	} catch (std::exception &ex) {
+		LOG(("Failed to get deleted messages: %1").arg(ex.what()));
+		return {};
 	}
-
-	std::string escaped;
-	escaped.reserve(searchQuery.size());
-	for (const auto c : searchQuery) {
-		if (c == '%' || c == '_' || c == '\\') {
-			escaped += '\\';
-		}
-		escaped += c;
-	}
-	const auto pattern = "%" + escaped + "%";
-	return storage.get_all<DeletedMessage>(
-		where(
-			column<DeletedMessage>(&DeletedMessage::userId) == userId and
-			column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId and
-			(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0) and
-			(column<DeletedMessage>(&DeletedMessage::messageId) > minId or minId == 0) and
-			(column<DeletedMessage>(&DeletedMessage::messageId) < maxId or maxId == 0) and
-			like(column<DeletedMessage>(&DeletedMessage::text), pattern, "\\")
-		),
-		order_by(column<DeletedMessage>(&DeletedMessage::messageId)).desc(),
-		limit(totalLimit)
-	);
 }
 
 bool hasDeletedMessages(ID userId, ID dialogId, ID topicId) {

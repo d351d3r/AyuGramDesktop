@@ -707,7 +707,7 @@ QString getPeerDC(not_null<PeerData*> peer) {
 
 int getScheduleTime(int64 sumSize) {
 	auto time = 12;
-	time += (int) std::ceil(std::max(6.0, std::ceil(sumSize / 1024.0 / 1024.0 * 0.7))) + 1;
+	time += (int) std::ceil(std::max(6.0, sumSize / 1024.0 / 1024.0 * 0.7)) + 1;
 	return time;
 }
 

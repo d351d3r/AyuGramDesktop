@@ -1,0 +1,96 @@
+// This is the source code of AyuGram for Desktop.
+//
+// We do not and cannot prevent the use of our code,
+// but be respectful and credit the original author.
+//
+// Copyright @Radolyn, 2026
+#pragma once
+
+#include <QByteArray>
+#include <string>
+
+class QString final {
+public:
+	QString() = default;
+	QString(const char *value);
+	QString(const QByteArray &value);
+
+	[[nodiscard]] static QString fromUtf8(const char *value);
+	[[nodiscard]] static QString fromStdString(const std::string &value);
+
+	[[nodiscard]] QString arg(const char *value) const;
+	[[nodiscard]] QString arg(const std::string &value) const;
+
+	template <typename T>
+	[[nodiscard]] QString arg(T value) const {
+		return substitute(std::to_string(value));
+	}
+
+	[[nodiscard]] int length() const;
+	void insert(int position, char value);
+
+	[[nodiscard]] bool operator==(const QString &other) const;
+
+	[[nodiscard]] const std::string &toStdString() const;
+
+private:
+	[[nodiscard]] QString substitute(const std::string &value) const;
+
+	std::string _data;
+
+};
+
+inline QString::QString(const char *value)
+: _data(value ? value : "") {
+}
+
+inline QString::QString(const QByteArray &value)
+: _data(value.toStdString()) {
+}
+
+inline QString QString::fromUtf8(const char *value) {
+	return QString(value);
+}
+
+inline QString QString::fromStdString(const std::string &value) {
+	auto result = QString();
+	result._data = value;
+	return result;
+}
+
+inline QString QString::arg(const char *value) const {
+	return substitute(value ? std::string(value) : std::string());
+}
+
+inline QString QString::arg(const std::string &value) const {
+	return substitute(value);
+}
+
+inline int QString::length() const {
+	return static_cast<int>(_data.size());
+}
+
+inline void QString::insert(int position, char value) {
+	_data.insert(_data.begin() + position, value);
+}
+
+inline bool QString::operator==(const QString &other) const {
+	return _data == other._data;
+}
+
+inline const std::string &QString::toStdString() const {
+	return _data;
+}
+
+inline QString QString::substitute(const std::string &value) const {
+	for (auto index = 1; index <= 9; ++index) {
+		const auto placeholder = "%" + std::to_string(index);
+		const auto at = _data.find(placeholder);
+		if (at != std::string::npos) {
+			auto result = *this;
+			result._data.replace(at, placeholder.size(), value);
+			return result;
+		}
+	}
+	return *this;
+}

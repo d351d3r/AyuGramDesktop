@@ -1,0 +1,72 @@
+// This is the source code of AyuGram for Desktop.
+//
+// We do not and cannot prevent the use of our code,
+// but be respectful and credit the original author.
+//
+// Copyright @Radolyn, 2026
+#pragma once
+
+#include <cstddef>
+#include <map>
+#include <QString>
+#include <string>
+
+class QJsonValueRef final {
+public:
+	explicit QJsonValueRef(std::string &target);
+
+	void operator=(const QString &value);
+	void operator=(bool value);
+	void operator=(long long value);
+
+private:
+	std::string &_target;
+
+};
+
+class QJsonObject final {
+public:
+	[[nodiscard]] QJsonValueRef operator[](const char *key);
+
+	[[nodiscard]] bool contains(const char *key) const;
+	[[nodiscard]] const std::string &serialized(const char *key) const;
+	[[nodiscard]] std::size_t size() const;
+
+private:
+	std::map<std::string, std::string> _values;
+
+};
+
+inline QJsonValueRef::QJsonValueRef(std::string &target)
+: _target(target) {
+}
+
+inline void QJsonValueRef::operator=(const QString &value) {
+	_target = value.toStdString();
+}
+
+inline void QJsonValueRef::operator=(bool value) {
+	_target = value ? "true" : "false";
+}
+
+inline void QJsonValueRef::operator=(long long value) {
+	_target = std::to_string(value);
+}
+
+inline QJsonValueRef QJsonObject::operator[](const char *key) {
+	return QJsonValueRef(_values[key]);
+}
+
+inline bool QJsonObject::contains(const char *key) const {
+	return _values.contains(key);
+}
+
+inline const std::string &QJsonObject::serialized(const char *key) const {
+	static const auto empty = std::string();
+	const auto i = _values.find(key);
+	return (i == _values.end()) ? empty : i->second;
+}
+
+inline std::size_t QJsonObject::size() const {
+	return _values.size();
+}

@@ -6,7 +6,13 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include <memory>
+#include <optional>
+#include <QByteArray>
+#include <QJsonObject>
+#include <QString>
 #include <string>
+#include <vector>
 
 using ID = long long;
 
@@ -72,6 +78,18 @@ public:
 	int entityCreateDate;
 };
 
+[[nodiscard]] inline QString FormatFilterId(const std::vector<char> &id) {
+	// make it look like java's UUID
+	auto hexId = QString(QByteArray(id.data(), id.size()).toHex());
+	if (hexId.length() == 32) {
+		hexId.insert(8, '-');
+		hexId.insert(13, '-');
+		hexId.insert(18, '-');
+		hexId.insert(23, '-');
+	}
+	return hexId;
+}
+
 class RegexFilter
 {
 public:
@@ -92,13 +110,13 @@ public:
 	}
 	[[nodiscard]] QJsonObject toJson() const {
 		QJsonObject json;
-		json["id"] = QString::fromUtf8(id.data());
+		json["id"] = FormatFilterId(id);
 		json["text"] = QString::fromStdString(text);
 		json["enabled"] = enabled;
 		json["reversed"] = reversed;
 		json["caseInsensitive"] = caseInsensitive;
 		if (dialogId.has_value()) {
-			json["dialogId"] = dialogId.value();
+			json["dialogId"] = *dialogId;
 		}
 		return json;
 	}

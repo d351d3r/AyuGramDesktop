@@ -440,16 +440,7 @@ struct BackupExclusion
 	QJsonObject toJson() const {
 		QJsonObject json;
 		json["dialogId"] = dialogId;
-
-		// make it look like java's UUID
-		auto hexId = QString(QByteArray(filterId.data(), filterId.size()).toHex());
-		if (hexId.length() == 32) {
-			hexId.insert(8, '-');
-			hexId.insert(13, '-');
-			hexId.insert(18, '-');
-			hexId.insert(23, '-');
-		}
-		json["filterId"] = hexId;
+		json["filterId"] = FormatFilterId(filterId);
 		return json;
 	}
 };
@@ -480,16 +471,7 @@ QString FilterUtils::exportFilters() {
 		filterJson["enabled"] = item.enabled;
 		filterJson["reversed"] = item.reversed;
 		filterJson["text"] = QString::fromStdString(item.text);
-
-		// make it look like java's UUID
-		auto hexId = QString(QByteArray(item.id.data(), item.id.size()).toHex());
-		if (hexId.length() == 32) {
-			hexId.insert(8, '-');
-			hexId.insert(13, '-');
-			hexId.insert(18, '-');
-			hexId.insert(23, '-');
-		}
-		filterJson["id"] = hexId;
+		filterJson["id"] = FormatFilterId(item.id);
 		filtersArray.append(filterJson);
 	}
 	jsonObject["filters"] = filtersArray;

@@ -1,0 +1,46 @@
+// This is the source code of AyuGram for Desktop.
+//
+// We do not and cannot prevent the use of our code,
+// but be respectful and credit the original author.
+//
+// Copyright @Radolyn, 2026
+#pragma once
+
+#include <cstddef>
+#include <string>
+
+class QByteArray final {
+public:
+	QByteArray(const char *data, std::size_t size);
+
+	[[nodiscard]] QByteArray toHex() const;
+
+	[[nodiscard]] const std::string &toStdString() const;
+
+private:
+	QByteArray() = default;
+
+	std::string _data;
+
+};
+
+inline QByteArray::QByteArray(const char *data, std::size_t size)
+: _data(data, size) {
+}
+
+inline QByteArray QByteArray::toHex() const {
+	static const char digits[] = "0123456789abcdef";
+
+	auto result = QByteArray();
+	result._data.reserve(_data.size() * 2);
+	for (const auto byte : _data) {
+		const auto value = static_cast<unsigned char>(byte);
+		result._data += digits[value >> 4];
+		result._data += digits[value & 0xF];
+	}
+	return result;
+}
+
+inline const std::string &QByteArray::toStdString() const {
+	return _data;
+}
