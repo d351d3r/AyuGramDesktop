@@ -8893,6 +8893,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_DeleteOwnMessagesConfirmationChat" = "Are you sure you want to delete all your messages from this chat?";
 "ayu_DeleteOwnMessagesConfirmationTopic" = "Are you sure you want to delete all your messages from this topic?";
 "ayu_DeleteOwnMessagesConfirmationSaved" = "Are you sure you want to delete all messages from Saved Messages?";
+"ayu_DeleteOwnMessagesStarted" = "Deleting your messages...";
+"ayu_DeleteOwnMessagesProgress#one" = "Deleted {count} of {total} messages...";
+"ayu_DeleteOwnMessagesProgress#other" = "Deleted {count} of {total} messages...";
+"ayu_DeleteOwnMessagesDone#one" = "Deleted {count} message.";
+"ayu_DeleteOwnMessagesDone#other" = "Deleted {count} messages.";
+"ayu_DeleteOwnMessagesNone" = "No messages of yours were found here.";
+"ayu_DeleteOwnMessagesFailed" = "Couldn't delete your messages: {error}";
+"ayu_DeleteOwnMessagesFailedPartial#one" = "Stopped after deleting {count} message: {error}";
+"ayu_DeleteOwnMessagesFailedPartial#other" = "Stopped after deleting {count} messages: {error}";
 "ayu_SuggestGhostModeTitle" = "Ghost Mode";
 "ayu_SuggestGhostModeStoryText" = "Do you want to enable **Ghost Mode** before viewing the story?";
 "ayu_SuggestGhostModeStoryActionTextYes" = "Yes";

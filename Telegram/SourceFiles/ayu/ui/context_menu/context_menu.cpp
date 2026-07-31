@@ -36,6 +36,7 @@
 #include "history/view/history_view_context_menu.h"
 #include "history/view/history_view_element.h"
 #include "main/session/send_as_peers.h"
+#include "mtproto/mtproto_response.h"
 #include "styles/style_ayu_icons.h"
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
@@ -48,6 +49,9 @@
 namespace AyuUi {
 
 namespace {
+
+constexpr auto kMyMessagesProgressEach = 1000;
+constexpr auto kMyMessagesToastDuration = crl::time(4000);
 
 Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> controller, not_null<PeerData*> peer, ID topicId) {
 	return [=] {
@@ -76,25 +80,58 @@ Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> cont
 	};
 }
 
-void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer, MsgId topicRootId) {
+void DeleteMyMessagesAfterConfirm(not_null<Window::SessionController*> controller,
+								  not_null<PeerData*> peer,
+								  MsgId topicRootId) {
 	const auto session = &peer->session();
+	const auto weak = base::make_weak(controller);
 
-	auto collected = std::make_shared<std::vector<MsgId>>();
+	struct State {
+		std::vector<MsgId> collected;
+		Fn<void(int)> removeNext;
+		Fn<void(MsgId)> requestNext;
+	};
+	const auto state = std::make_shared<State>();
 
-	const auto removeNext = std::make_shared<Fn<void(int)>>();
-	const auto requestNext = std::make_shared<Fn<void(MsgId)>>();
-
-	*removeNext = [=](int index)
+	const auto report = [=](const QString &text)
 	{
-		if (index >= int(collected->size())) {
-			DEBUG_LOG(("Deleted all %1 my messages in this chat").arg(collected->size()));
+		if (const auto strong = weak.get()) {
+			strong->showToast(text, kMyMessagesToastDuration);
+		}
+	};
+	const auto reportFailure = [=](const MTP::Error &error, int deleted)
+	{
+		if (MTP::IgnoreError(error)) {
+			return;
+		}
+		report(deleted
+			? tr::ayu_DeleteOwnMessagesFailedPartial(
+				tr::now,
+				lt_count,
+				deleted,
+				lt_error,
+				error.type())
+			: tr::ayu_DeleteOwnMessagesFailed(
+				tr::now,
+				lt_error,
+				error.type()));
+	};
+
+	state->removeNext = [=](int index)
+	{
+		const auto total = int(state->collected.size());
+		if (index >= total) {
+			DEBUG_LOG(("Deleted all %1 my messages in this chat").arg(total));
+			report(total
+				? tr::ayu_DeleteOwnMessagesDone(tr::now, lt_count, total)
+				: tr::ayu_DeleteOwnMessagesNone(tr::now));
 			return;
 		}
 
 		QVector<MTPint> ids;
-		ids.reserve(std::min<int>(100, collected->size() - index));
-		for (auto i = 0; i < 100 && (index + i) < int(collected->size()); ++i) {
-			ids.push_back(MTP_int((*collected)[index + i].bare));
+		ids.reserve(std::min<int>(100, total - index));
+		for (auto i = 0; i < 100 && (index + i) < total; ++i) {
+			ids.push_back(MTP_int(state->collected[index + i].bare));
 		}
 
 		const auto batch = index / 100 + 1;
@@ -106,16 +143,23 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer, MsgId topicRootId) {
 			} else {
 				session->data().processNonChannelMessagesDeleted(ids);
 			}
-			const auto deleted = index + ids.size();
-			DEBUG_LOG(("Deleted batch %1, total deleted %2/%3").arg(batch).arg(deleted).arg(collected->size()));
+			const auto deleted = index + int(ids.size());
+			DEBUG_LOG(("Deleted batch %1, total deleted %2/%3").arg(batch).arg(deleted).arg(total));
+			if (deleted < total && (deleted % kMyMessagesProgressEach) == 0) {
+				report(tr::ayu_DeleteOwnMessagesProgress(
+					tr::now,
+					lt_count,
+					deleted,
+					lt_total,
+					QString::number(total)));
+			}
 			const auto delay = crl::time(500 + base::RandomValue<int>() % 500);
-			base::call_delayed(delay, [=] { (*removeNext)(deleted); });
+			base::call_delayed(delay, session, [=] { state->removeNext(deleted); });
 		};
 		const auto fail = [=](const MTP::Error &error)
 		{
 			DEBUG_LOG(("Delete batch failed: %1").arg(error.type()));
-			const auto delay = crl::time(1000);
-			base::call_delayed(delay, [=] { (*removeNext)(index); });
+			reportFailure(error, index);
 		};
 
 		if (const auto channel = peer->asChannel()) {
@@ -123,7 +167,6 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer, MsgId topicRootId) {
 				.request(MTPchannels_DeleteMessages(channel->inputChannel(), MTP_vector<MTPint>(ids)))
 				.done(done)
 				.fail(fail)
-				.handleFloodErrors()
 				.send();
 		} else {
 			using Flag = MTPmessages_DeleteMessages::Flag;
@@ -131,12 +174,11 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer, MsgId topicRootId) {
 				.request(MTPmessages_DeleteMessages(MTP_flags(Flag::f_revoke), MTP_vector<MTPint>(ids)))
 				.done(done)
 				.fail(fail)
-				.handleFloodErrors()
 				.send();
 		}
 	};
 
-	*requestNext = [=](MsgId from)
+	state->requestNext = [=](MsgId from)
 	{
 		using Flag = MTPmessages_Search::Flag;
 		auto request = MTPmessages_Search(
@@ -173,22 +215,27 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer, MsgId topicRootId) {
 				int batchCount = 0;
 				for (const auto &id : parsed.messageIds) {
 					if (!minId || id < minId) minId = id;
-					collected->push_back(id);
+					state->collected.push_back(id);
 					++batchCount;
 				}
-				DEBUG_LOG(("Batch found %1 my messages, total %2").arg(batchCount).arg(collected->size()));
+				DEBUG_LOG(("Batch found %1 my messages, total %2").arg(batchCount).arg(state->collected.size()));
 				if (parsed.messageIds.size() == 100 && minId) {
-					(*requestNext)(minId - MsgId(1));
+					state->requestNext(minId - MsgId(1));
 				} else {
-					DEBUG_LOG(("Found %1 my messages in this chat (SEARCH)").arg(collected->size()));
-					(*removeNext)(0);
+					DEBUG_LOG(("Found %1 my messages in this chat (SEARCH)").arg(state->collected.size()));
+					state->removeNext(0);
 				}
 			})
-			.fail([=](const MTP::Error &error) { DEBUG_LOG(("History fetch failed: %1").arg(error.type())); })
+			.fail([=](const MTP::Error &error)
+			{
+				DEBUG_LOG(("History fetch failed: %1").arg(error.type()));
+				reportFailure(error, 0);
+			})
 			.send();
 	};
 
-	(*requestNext)(MsgId(0));
+	report(tr::ayu_DeleteOwnMessagesStarted(tr::now));
+	state->requestNext(MsgId(0));
 }
 
 [[nodiscard]] QString DeleteMyMessagesText(not_null<PeerData*> peer, MsgId topicRootId) {
@@ -213,7 +260,7 @@ Fn<void()> DeleteMyMessagesHandler(not_null<Window::SessionController*> controll
 				.confirmed =
 				[=](Fn<void()> &&close)
 				{
-					DeleteMyMessagesAfterConfirm(peer, topicRootId);
+					DeleteMyMessagesAfterConfirm(controller, peer, topicRootId);
 					close();
 				},
 				.confirmText = tr::lng_box_delete(),
