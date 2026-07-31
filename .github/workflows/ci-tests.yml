@@ -1,0 +1,32 @@
+name: CI Tests.
+
+on:
+  push:
+    branches:
+      - upstream-7.0.6
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  tests:
+    name: AyuGram tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # The suite compiles the real ayu_database.cpp against the vendored
+      # sqlite with small shims, so it needs neither Qt nor the submodules.
+      - name: Clone.
+        uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Storage layer.
+        run: sh Telegram/SourceFiles/ayu/tests/run_tests.sh
+
+      - name: Static guards.
+        run: ./Telegram/SourceFiles/ayu/tests/guard_checks.py
